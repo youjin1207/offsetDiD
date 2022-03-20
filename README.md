@@ -5,7 +5,7 @@
 We use the data obtained from major US retailers, which was purchased from Information Resources Inc (IRI). We focus on beverages prices and sales in Philadelphia, the counties within approximately 3 miles of Philadelphia's border, and Baltimore.
 The details can be found [here](https://jamanetwork.com/journals/jama/fullarticle/2733208) and [here](https://ageconsearch.umn.edu/record/234905/).
 
-We provide the sample data `Data/sample sales.csv`, which has the same data structure as the Philadelphia beverage data we evaluated in the manuscript (e.g., panel data with several time points from three separate treatment groups). This data was created at random and is only intended to be used as an example, not to be replicated.
+We provide the sample data `Data/sample_sales.csv`, which has the same data structure as the Philadelphia beverage data we evaluated in the manuscript (e.g., panel data with several time points from three separate treatment groups). This data was created at random and is only intended to be used as an example, not to be replicated.
 
 ## Code
 

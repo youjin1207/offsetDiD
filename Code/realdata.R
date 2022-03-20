@@ -1,4 +1,4 @@
-long.data = read.csv("Data/sample sales.csv", header = T, sep =",") # read the sample data 
+long.data = read.csv("Data/sample_sales.csv", header = T, sep =",") # read the sample data 
 long.data$obs.Y = long.data$Units_TaxInd # (1) taxed individual size beverages
 #long.data$obs.Y = long.data$Units_TaxedFam # (2) taxed family size beverages
 long.data$obs.A2 = ifelse(long.data$city == "Philadelphia", 1, 0) # treatment group indicator
