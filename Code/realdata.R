@@ -1,3 +1,9 @@
+library(MASS)
+library(nnet)
+library(lme4)
+library(xtable)
+###
+
 long.data = read.csv("Data/sample_sales.csv", header = T, sep =",") # read the sample data 
 long.data$obs.Y = long.data$Units_TaxInd # (1) taxed individual size beverages
 #long.data$obs.Y = long.data$Units_TaxedFam # (2) taxed family size beverages
@@ -20,7 +26,7 @@ fit.outcome = lmer(obs.Y ~ obs.A2 + obs.A3 + time +  # treatment group indicator
                      (1|ID), # unit-level random effects
                     data = long.data)
 
-# print out the fitting result
+# print out the fitting result (Table S5 in the Supplementary Materials)
 z = summary(fit.outcome)$coefficients[,3]
 p = (1 - pnorm(abs(z), 0, 1)) * 2
 print(xtable(cbind(z,p), digits = 3))
@@ -60,16 +66,17 @@ pihat_control = fitted.values(prop.fit)[,1]
 pihat_treat = fitted.values(prop.fit)[,2]
 pihat_neighbor = fitted.values(prop.fit)[,3]
 
-# print out the fitting result
+# print out the fitting result (Table S4 in the Supplementary Materials)
 z = summary(prop.fit)$coefficients/summary(prop.fit)$standard.errors
 print(xtable(z, digits = 3))
 p = (1 - pnorm(abs(z), 0, 1)) * 2
 print(xtable(p, digits = 3))
 
-######################
-###### ATT ##########
-######################
+###############################################################
+### Reproduce the results in Table 5 in the main manuscript ###
+###############################################################
 
+## ATT ##
 control.A = (short.data$obs.A == 1); treat.A = (short.data$obs.A == 2); neighbor.A =(short.data$obs.A == 3)
 a1 = mean(short.data$obs.A == 2)
 a2 =  mean(((short.data$obs.A == 2) - pihat_treat*(short.data$obs.A == 1)/pihat_control)*( (short.data$obs.Y1 - short.data$obs.Y0) - (muhat_control1 - muhat_control0)) )
@@ -79,7 +86,7 @@ reg.ATT = mean((short.data$obs.A == 2)*(short.data$obs.Y1 - short.data$obs.Y0))/
   mean((short.data$obs.A == 2)*(muhat_control1 - muhat_control0))/mean(short.data$obs.A == 2)
 # ipw estimator
 ipw.ATT =  mean((short.data$obs.Y1 - short.data$obs.Y0)*(treat.A/pihat_treat - control.A/pihat_control)*pihat_treat)/a1
-# efficient influence function
+# estimated efficient influence function
 phi.ATT =  ((short.data$obs.A == 2)*( (short.data$obs.Y1 - short.data$obs.Y0) - (muhat_treat1 - muhat_treat0)))/mean(short.data$obs.A == 2) - 
   (pihat_treat*(short.data$obs.A == 1)/pihat_control*( (short.data$obs.Y1 - short.data$obs.Y0) - (muhat_control1 - muhat_control0)))/mean(short.data$obs.A == 2) + 
   (short.data$obs.A==2)*(muhat_treat1 - muhat_treat0 - (muhat_control1 - muhat_control0))/mean(short.data$obs.A == 2) - (short.data$obs.A==2)*dr.ATT/mean(short.data$obs.A==2) 
@@ -87,9 +94,7 @@ dr.ATT.var = mean(phi.ATT^2)/nrow(short.data)
 print(c(dr.ATT - 1.96*sqrt(dr.ATT.var),  dr.ATT + 1.96*sqrt(dr.ATT.var)))
 
 
-######################
-###### ATN ##########
-######################
+## ATN ##
 a1 = mean(short.data$obs.A == 3)
 a2 = mean(((short.data$obs.A == 3) - pihat_neighbor*(short.data$obs.A == 1)/pihat_control)*( (short.data$obs.Y1 - short.data$obs.Y0) - (muhat_control1 - muhat_control0)) )
 dr.ATN = a2/a1 # doubly-robust estimator
@@ -98,16 +103,14 @@ reg.ATN = mean((short.data$obs.A == 3)*(short.data$obs.Y1 - short.data$obs.Y0)) 
   mean((short.data$obs.A == 3)*(muhat_control1 - muhat_control0))/mean(short.data$obs.A == 3)
 # ipw estimator
 ipw.ATN = mean((short.data$obs.Y1 - short.data$obs.Y0)*(neighbor.A/pihat_neighbor - control.A/pihat_control)*pihat_neighbor)/a1
-# efficient influence function
+# estimated efficient influence function
 phi.ATN = ((short.data$obs.A == 3)*( (short.data$obs.Y1 - short.data$obs.Y0) - (muhat_neighbor1 - muhat_neighbor0)))/mean(short.data$obs.A == 3) - 
   (pihat_neighbor*(short.data$obs.A == 1)/pihat_control*( (short.data$obs.Y1 - short.data$obs.Y0) - (muhat_control1 - muhat_control0)))/mean(short.data$obs.A == 3) + 
   (short.data$obs.A==3)*(muhat_neighbor1 - muhat_neighbor0 - (muhat_control1 - muhat_control0))/mean(short.data$obs.A == 3) -   (short.data$obs.A==3)*dr.ATN/mean(short.data$obs.A==3) 
 dr.ATN.var = mean(phi.ATN^2)/nrow(short.data)
 print(c(dr.ATN - 1.96*sqrt(dr.ATN.var),  dr.ATN + 1.96*sqrt(dr.ATN.var)))
 
-######################
-###### offset ########
-######################
+## -offsetting effect (delta) ##
 a2 = mean(((short.data$obs.A == 3)*pihat_treat/pihat_neighbor)*((short.data$obs.Y1 - short.data$obs.Y0 -  (muhat_neighbor1 - muhat_neighbor0) ))) + mean((short.data$obs.A==2)*(muhat_neighbor1 - muhat_neighbor0)) -  
   mean((control.A*pihat_treat/pihat_control)*((short.data$obs.Y1 - short.data$obs.Y0 -  (muhat_control1 - muhat_control0) ))) -  mean((short.data$obs.A==2)*(muhat_control1 - muhat_control0))
 dr.offset = a2/mean(short.data$obs.A == 2) # doubly robust estimator
@@ -116,16 +119,14 @@ reg.offset =  mean((short.data$obs.A == 2)*(muhat_neighbor1 - muhat_neighbor0))/
   mean((short.data$obs.A == 2)*(muhat_control1 - muhat_control0))/mean(short.data$obs.A == 2)
 # ipw estimator
 ipw.offset = mean((short.data$obs.Y1 - short.data$obs.Y0)*((short.data$obs.A == 3)/pihat_neighbor - control.A/pihat_control)*pihat_treat)/mean(short.data$obs.A == 2)
-# efficient influence function
+# estimated efficient influence function
 phi.offset = (pihat_treat*(short.data$obs.A == 3)/pihat_neighbor*( (short.data$obs.Y1 - short.data$obs.Y0) - (muhat_neighbor1 - muhat_neighbor0)))/mean(short.data$obs.A == 2) - 
   (pihat_treat*(short.data$obs.A == 1)/pihat_control*( (short.data$obs.Y1 - short.data$obs.Y0) - (muhat_control1 - muhat_control0)))/mean(short.data$obs.A == 2) + 
-  (short.data$obs.A==2)*(muhat_neighbor1 - muhat_neighbor0 - (muhat_control1 - muhat_control0))/mean(short.data$obs.A == 2) -   (short.data$obs.A==2)*dr.offset/mean(short.data$obs.A==2) 
+  (short.data$obs.A==2)*(muhat_neighbor1 - muhat_neighbor0 - (muhat_control1 - muhat_control0))/mean(short.data$obs.A == 2) - (short.data$obs.A==2)*dr.offset/mean(short.data$obs.A==2) 
 dr.offset.var = mean(phi.offset^2)/nrow(short.data)
 print(c(dr.offset - 1.96*sqrt(dr.offset.var),  dr.offset + 1.96*sqrt(dr.offset.var)))
 
-######################
-###### AOTT ########
-######################
+## AOTT ##
 reg.AOTT = reg.ATT + reg.offset
 dr.AOTT = dr.ATT + dr.offset
 ipw.AOTT = ipw.ATT + ipw.offset

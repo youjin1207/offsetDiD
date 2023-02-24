@@ -44,7 +44,7 @@ for(r in 1:1000){
   
   set.seed(r)
   
-  N = 2000 # N=500, 1000
+  N = 2000 # N=500, 1000 (for Table 3 in the main manuscript; fix N = 2000 for Table S1 in the Supplementary Materials)
   epsilons = mvrnorm(N, c(0,0), matrix(c(1, 0.2, 0.2, 1), 2, 2)) # correlated within unit outcomes (two time points)
   X = mvrnorm(N, c(0,0), matrix(c(1, 0.3, 0.3, 1), 2, 2))
   X[,1] = pmin(pmax(-2.0, round(10*X[,1])/10), 2.0)
