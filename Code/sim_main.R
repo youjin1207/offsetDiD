@@ -15,11 +15,10 @@ theta_neighbor = 0.5; theta_treat = -1
 NN = 10000*5
 X = mvrnorm(NN, c(0,0), matrix(c(1, 0.3, 0.3, 1), 2, 2))
 tmp = c(0, -0.5, 0.3) + X %*%  cbind(betas_control, betas_treat, betas_neighbor)
-X[,1] = pmin(pmax(-2.0, round(10*X[,1])/10), 2.0)
-X[,2] = pmin(pmax(-2.0, round(10*X[,2])/10), 2.0)
 obs.A = matrix(0, NN, 3)
 for(i in 1:NN){
   obs.A[i,] =  rmultinom(1, 1, c(exp(tmp)[i,1:3]))
+  eta[i] = exp(tmp[i,3])/exp(tmp[i,2])
 }
 obs.A = cbind(obs.A, rep(0, NN))
 obs.A = apply(obs.A, 1, function(x) which(x == 1)) # 1: control, 2: treatment, 3: neighbors
@@ -27,17 +26,13 @@ obs.A = apply(obs.A, 1, function(x) which(x == 1)) # 1: control, 2: treatment, 3
 
 true.ATT =  mean(theta_treat*(1 - 0.5*X[obs.A==2,1]))
 true.ATN =  mean(theta_neighbor*(1 + 0.5*X[obs.A==3, 1]) + theta_neighbor*(1-2*(X[obs.A==3,2])^2))
-true.offset = mean(theta_neighbor*(1 + 0.5*X[obs.A==2, 1]) + theta_neighbor*(1-2*(X[obs.A==2,2])^2)) # -(offset effects)
-true.AOTT =  mean(theta_treat*(1-0.5*X[obs.A==2,1])) + mean(theta_neighbor*(1 + 0.5*X[obs.A==2, 1]) + theta_neighbor*(1-2*(X[obs.A==2,2])^2))
+true.offset = mean((exp(tmp[obs.A == 2,3])/exp(tmp[obs.A == 2,2]))*theta_neighbor*(1 + 0.5*X[obs.A==2, 1]) + theta_neighbor*(1-0.5*(X[obs.A==2,2])^2)) # -(offset effects)
+true.AOTT =  true.ATT + true.offset
 
-
-
-
-naive.neighbor = naive.treat = dr.ATT = dr.ATN = dr.offset = dr.AOTT = 
-  dr.ATT.var = dr.ATN.var = dr.offset.var = dr.AOTT.var = dr.AOTT.var2 =  
-  cr.ATT = cr.ATN = cr.offset = cr.AOTT = cr.AOTT2 = 
-  reg.ATT = reg.ATN = reg.offset = reg.AOTT =  
-  ipw.ATT = ipw.ATN = ipw.offset = ipw.AOTT = c()
+dr.offset = boot.dr.se = dr.offset.cr = matrix(NA, 1000, 27)
+ipw.offset = reg.offset =  eff.offset = 
+  boot.ipw.se = boot.reg.se =  boot.eff.se = 
+  ipw.offset.cr = reg.offset.cr = eff.offset.cr = c()
 
 ############### Simulation Study ##################
 for(r in 1:1000){
@@ -47,9 +42,7 @@ for(r in 1:1000){
   N = 2000 # N=500, 1000 (for Table 3 in the main manuscript; fix N = 2000 for Table S1 in the Supplementary Materials)
   epsilons = mvrnorm(N, c(0,0), matrix(c(1, 0.2, 0.2, 1), 2, 2)) # correlated within unit outcomes (two time points)
   X = mvrnorm(N, c(0,0), matrix(c(1, 0.3, 0.3, 1), 2, 2))
-  X[,1] = pmin(pmax(-2.0, round(10*X[,1])/10), 2.0)
-  X[,2] = pmin(pmax(-2.0, round(10*X[,2])/10), 2.0)
-  
+
   tmp = c(0, 0.0, 0.3) + X %*%  cbind(betas_control, betas_treat, betas_neighbor)
   obs.A = matrix(0, N, 3)
   for(i in 1:N){
@@ -67,10 +60,9 @@ for(r in 1:1000){
   obs.Y0 = gamma_0 + X %*% lambda_0 + alpha_a[obs.A] + epsilons[,1]
   ## generate the treatment effects
   t.effect = ifelse(obs.A == 1, 0, ifelse(obs.A == 2, theta_treat*(1 - 0.5*X[,1]),
-                                          ifelse(obs.A == 3, theta_neighbor*(1 + 0.5*X[, 1]) + theta_neighbor*(1-2*(X[,2]^2)), NA)))
+                                          ifelse(obs.A == 3, theta_neighbor*(1 + 0.5*X[, 1]) + theta_neighbor*(1-0.5*(X[,2]^2)), NA)))
   # generate the outcome at t=1 (post-treatment)
   obs.Y1 = gamma_1 + X %*% lambda_1 + alpha_a[obs.A] + t.effect + epsilons[,2]
-  
   
   obs.data = data.frame(obs.A = obs.A, X = X, obs.Y0 = obs.Y0, obs.Y1 = obs.Y1)
   long.data = data.frame(obs.Y = c(obs.Y0, obs.Y1), obs.A = rep(obs.A,2), X1 = rep(X[,1], 2),

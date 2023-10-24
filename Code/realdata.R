@@ -2,6 +2,7 @@ library(MASS)
 library(nnet)
 library(lme4)
 library(xtable)
+library(plotrix)
 ###
 
 long.data = read.csv("Data/sample_sales.csv", header = T, sep =",") # read the sample data 
@@ -26,7 +27,7 @@ fit.outcome = lmer(obs.Y ~ obs.A2 + obs.A3 + time +  # treatment group indicator
                      (1|ID), # unit-level random effects
                     data = long.data)
 
-# print out the fitting result (Table S5 in the Supplementary Materials)
+# print out the fitting result (Table S1 in the Supplementary Materials)
 z = summary(fit.outcome)$coefficients[,3]
 p = (1 - pnorm(abs(z), 0, 1)) * 2
 print(xtable(cbind(z,p), digits = 3))
@@ -66,7 +67,7 @@ pihat_control = fitted.values(prop.fit)[,1]
 pihat_treat = fitted.values(prop.fit)[,2]
 pihat_neighbor = fitted.values(prop.fit)[,3]
 
-# print out the fitting result (Table S4 in the Supplementary Materials)
+# print out the fitting result (Table S2 in the Supplementary Materials)
 z = summary(prop.fit)$coefficients/summary(prop.fit)$standard.errors
 print(xtable(z, digits = 3))
 p = (1 - pnorm(abs(z), 0, 1)) * 2
@@ -76,60 +77,83 @@ print(xtable(p, digits = 3))
 ### Reproduce the results in Table 5 in the main manuscript ###
 ###############################################################
 
-## ATT ##
-control.A = (short.data$obs.A == 1); treat.A = (short.data$obs.A == 2); neighbor.A =(short.data$obs.A == 3)
-a1 = mean(short.data$obs.A == 2)
-a2 =  mean(((short.data$obs.A == 2) - pihat_treat*(short.data$obs.A == 1)/pihat_control)*( (short.data$obs.Y1 - short.data$obs.Y0) - (muhat_control1 - muhat_control0)) )
-dr.ATT = a2/a1  # doubly robust estimator
-# regression-based estimator
-reg.ATT = mean((short.data$obs.A == 2)*(short.data$obs.Y1 - short.data$obs.Y0))/mean(short.data$obs.A == 2) -  
-  mean((short.data$obs.A == 2)*(muhat_control1 - muhat_control0))/mean(short.data$obs.A == 2)
-# ipw estimator
-ipw.ATT =  mean((short.data$obs.Y1 - short.data$obs.Y0)*(treat.A/pihat_treat - control.A/pihat_control)*pihat_treat)/a1
-# estimated efficient influence function
-phi.ATT =  ((short.data$obs.A == 2)*( (short.data$obs.Y1 - short.data$obs.Y0) - (muhat_treat1 - muhat_treat0)))/mean(short.data$obs.A == 2) - 
-  (pihat_treat*(short.data$obs.A == 1)/pihat_control*( (short.data$obs.Y1 - short.data$obs.Y0) - (muhat_control1 - muhat_control0)))/mean(short.data$obs.A == 2) + 
-  (short.data$obs.A==2)*(muhat_treat1 - muhat_treat0 - (muhat_control1 - muhat_control0))/mean(short.data$obs.A == 2) - (short.data$obs.A==2)*dr.ATT/mean(short.data$obs.A==2) 
-dr.ATT.var = mean(phi.ATT^2)/nrow(short.data)
-print(c(dr.ATT - 1.96*sqrt(dr.ATT.var),  dr.ATT + 1.96*sqrt(dr.ATT.var)))
+Units_TaxInd_results = real_sim_function(long.data, theta = 1)
+
+boot.ipw.ATT = boot.ipw.ATN = boot.ipw.offset = boot.ipw.AOTT = 
+  boot.reg.ATT = boot.reg.ATN = boot.reg.offset = boot.reg.AOTT = c()
+boot.dr.ATT = boot.dr.ATN = dr.ATT.var = dr.ATN.var = c();
+boot.dr.offset = boot.dr.AOTT = matrix(NA, 10, 27)
+for(b in 1:10){
+  set.seed(b)
+  print(b)
+  
+  N = 54
+  sampled = sample(1:N, N, replace = TRUE)
+  newdata = c()
+  for(i in 1:N){
+    newdata = rbind(newdata, long.data[long.data$ID %in% sampled[i], ])
+  }
+  results = real_sim_function(newdata)
+  
+  boot.ipw.ATT[b] = results[[1]][[1]]
+  boot.ipw.ATN[b] = results[[2]][[1]]
+  boot.ipw.offset[b] = results[[3]][[1]]
+  boot.ipw.AOTT[b] = results[[4]][[1]]
+  
+  
+  boot.reg.ATT[b] = results[[1]][[2]]
+  boot.reg.ATN[b] = results[[2]][[2]]
+  boot.reg.offset[b] = results[[3]][[2]]
+  boot.reg.AOTT[b] = results[[4]][[2]]
+  
+  
+  boot.dr.ATT[b] = results[[1]][[3]]
+  boot.dr.ATN[b] = results[[2]][[3]]
+  boot.dr.offset[b,] = results[[3]][[3]]
+  boot.dr.AOTT[b,] = results[[4]][[3]]
+  
+  dr.ATT.var[b] = results[[1]][[4]]
+  dr.ATN.var[b] = results[[2]][[4]]
+  
+}
+
+## ATT results
+c(Units_TaxInd_results[[1]][[1]], Units_TaxInd_results[[1]][[1]] - 1.96*sd(boot.ipw.ATT), Units_TaxInd_results[[1]][[1]] + 1.96*sd(boot.ipw.ATT))
+c(Units_TaxInd_results[[1]][[2]], Units_TaxInd_results[[1]][[2]] - 1.96*sd(boot.reg.ATT), Units_TaxInd_results[[1]][[2]] + 1.96*sd(boot.reg.ATT))
+dr.ATT.results = c(Units_TaxInd_results[[1]][[3]], Units_TaxInd_results[[1]][[3]] - 1.96*sd(boot.dr.ATT), Units_TaxInd_results[[1]][[3]] + 1.96*sd(boot.dr.ATT))
+c(Units_TaxInd_results[[1]][[3]], Units_TaxInd_results[[1]][[3]] - 1.96*sqrt(Units_TaxInd_results[[1]][[4]]), Units_TaxInd_results[[1]][[3]] + 1.96*sqrt(Units_TaxInd_results[[1]][[4]]))
 
 
-## ATN ##
-a1 = mean(short.data$obs.A == 3)
-a2 = mean(((short.data$obs.A == 3) - pihat_neighbor*(short.data$obs.A == 1)/pihat_control)*( (short.data$obs.Y1 - short.data$obs.Y0) - (muhat_control1 - muhat_control0)) )
-dr.ATN = a2/a1 # doubly-robust estimator
-# regression-based estimator
-reg.ATN = mean((short.data$obs.A == 3)*(short.data$obs.Y1 - short.data$obs.Y0)) /mean(short.data$obs.A == 3) -  
-  mean((short.data$obs.A == 3)*(muhat_control1 - muhat_control0))/mean(short.data$obs.A == 3)
-# ipw estimator
-ipw.ATN = mean((short.data$obs.Y1 - short.data$obs.Y0)*(neighbor.A/pihat_neighbor - control.A/pihat_control)*pihat_neighbor)/a1
-# estimated efficient influence function
-phi.ATN = ((short.data$obs.A == 3)*( (short.data$obs.Y1 - short.data$obs.Y0) - (muhat_neighbor1 - muhat_neighbor0)))/mean(short.data$obs.A == 3) - 
-  (pihat_neighbor*(short.data$obs.A == 1)/pihat_control*( (short.data$obs.Y1 - short.data$obs.Y0) - (muhat_control1 - muhat_control0)))/mean(short.data$obs.A == 3) + 
-  (short.data$obs.A==3)*(muhat_neighbor1 - muhat_neighbor0 - (muhat_control1 - muhat_control0))/mean(short.data$obs.A == 3) -   (short.data$obs.A==3)*dr.ATN/mean(short.data$obs.A==3) 
-dr.ATN.var = mean(phi.ATN^2)/nrow(short.data)
-print(c(dr.ATN - 1.96*sqrt(dr.ATN.var),  dr.ATN + 1.96*sqrt(dr.ATN.var)))
+## ATN results
+c(Units_TaxInd_results[[2]][[1]], Units_TaxInd_results[[2]][[1]] - 1.96*sd(boot.ipw.ATN), Units_TaxInd_results[[2]][[1]] + 1.96*sd(boot.ipw.ATN))
+c(Units_TaxInd_results[[2]][[2]], Units_TaxInd_results[[2]][[2]] - 1.96*sd(boot.reg.ATN), Units_TaxInd_results[[2]][[2]] + 1.96*sd(boot.reg.ATN))
+dr.ATN.results = c(Units_TaxInd_results[[2]][[3]], Units_TaxInd_results[[2]][[3]] - 1.96*sd(boot.dr.ATN), Units_TaxInd_results[[2]][[3]] + 1.96*sd(boot.dr.ATN))
+c(Units_TaxInd_results[[2]][[3]], Units_TaxInd_results[[2]][[3]] - 1.96*sqrt(Units_TaxInd_results[[2]][[4]]), Units_TaxInd_results[[2]][[3]] + 1.96*sqrt(Units_TaxInd_results[[2]][[4]]))
 
-## -offsetting effect (delta) ##
-a2 = mean(((short.data$obs.A == 3)*pihat_treat/pihat_neighbor)*((short.data$obs.Y1 - short.data$obs.Y0 -  (muhat_neighbor1 - muhat_neighbor0) ))) + mean((short.data$obs.A==2)*(muhat_neighbor1 - muhat_neighbor0)) -  
-  mean((control.A*pihat_treat/pihat_control)*((short.data$obs.Y1 - short.data$obs.Y0 -  (muhat_control1 - muhat_control0) ))) -  mean((short.data$obs.A==2)*(muhat_control1 - muhat_control0))
-dr.offset = a2/mean(short.data$obs.A == 2) # doubly robust estimator
-# regression-based estimator
-reg.offset =  mean((short.data$obs.A == 2)*(muhat_neighbor1 - muhat_neighbor0))/mean(short.data$obs.A == 2) -  
-  mean((short.data$obs.A == 2)*(muhat_control1 - muhat_control0))/mean(short.data$obs.A == 2)
-# ipw estimator
-ipw.offset = mean((short.data$obs.Y1 - short.data$obs.Y0)*((short.data$obs.A == 3)/pihat_neighbor - control.A/pihat_control)*pihat_treat)/mean(short.data$obs.A == 2)
-# estimated efficient influence function
-phi.offset = (pihat_treat*(short.data$obs.A == 3)/pihat_neighbor*( (short.data$obs.Y1 - short.data$obs.Y0) - (muhat_neighbor1 - muhat_neighbor0)))/mean(short.data$obs.A == 2) - 
-  (pihat_treat*(short.data$obs.A == 1)/pihat_control*( (short.data$obs.Y1 - short.data$obs.Y0) - (muhat_control1 - muhat_control0)))/mean(short.data$obs.A == 2) + 
-  (short.data$obs.A==2)*(muhat_neighbor1 - muhat_neighbor0 - (muhat_control1 - muhat_control0))/mean(short.data$obs.A == 2) - (short.data$obs.A==2)*dr.offset/mean(short.data$obs.A==2) 
-dr.offset.var = mean(phi.offset^2)/nrow(short.data)
-print(c(dr.offset - 1.96*sqrt(dr.offset.var),  dr.offset + 1.96*sqrt(dr.offset.var)))
+## offsetting results
+c(Units_TaxInd_results[[3]][[1]], Units_TaxInd_results[[3]][[1]] - 1.96*sd(boot.ipw.offset), Units_TaxInd_results[[3]][[1]] + 1.96*sd(boot.ipw.offset))
+c(Units_TaxInd_results[[3]][[2]], Units_TaxInd_results[[3]][[2]] - 1.96*sd(boot.reg.offset), Units_TaxInd_results[[3]][[2]] + 1.96*sd(boot.reg.offset))
+dr.offset.results = cbind(Units_TaxInd_results[[3]][[3]], Units_TaxInd_results[[3]][[3]] - 1.96*apply(boot.dr.offset,2,sd), Units_TaxInd_results[[3]][[3]] + 1.96*apply(boot.dr.offset, 2, sd))
 
-## AOTT ##
-reg.AOTT = reg.ATT + reg.offset
-dr.AOTT = dr.ATT + dr.offset
-ipw.AOTT = ipw.ATT + ipw.offset
-dr.AOTT.var = var(phi.ATT + phi.offset)/nrow(short.data)
-print(c(dr.AOTT - 1.96*sqrt(dr.AOTT.var),  dr.AOTT + 1.96*sqrt(dr.AOTT.var)))
-print(c(dr.ATT - 1.96*sqrt(dr.ATT.var),  dr.ATT + 1.96*sqrt(dr.ATT.var)))
+## AOTT results
+c(Units_TaxInd_results[[4]][[1]], Units_TaxInd_results[[4]][[1]] - 1.96*sd(boot.ipw.AOTT), Units_TaxInd_results[[4]][[1]] + 1.96*sd(boot.ipw.AOTT))
+c(Units_TaxInd_results[[4]][[2]], Units_TaxInd_results[[4]][[2]] - 1.96*sd(boot.reg.AOTT), Units_TaxInd_results[[4]][[2]] + 1.96*sd(boot.reg.AOTT))
+dr.AOTT.results = cbind(Units_TaxInd_results[[4]][[3]], Units_TaxInd_results[[4]][[3]] - 1.96*apply(boot.dr.AOTT,2,sd), Units_TaxInd_results[[4]][[3]] + 1.96*apply(boot.dr.AOTT, 2, sd))
+
+## Out of 27, we only consider nine conditionally doubly robust estimator with gamma1 = gamma2
+index = c(1, 2, 3, 13, 14, 15, 25, 26, 27)
+
+
+## Figure 3
+par(mfrow = c(1,1), cex.lab = 1.7, cex.axis = 1.5, 
+    mar=c(5,5,3,5), tcl = 0.5,  xpd = FALSE, cex.main = 2)
+plotCI(x = c(1:11),              
+       y = c(dr.ATT.results[1], dr.ATN.results[1], dr.AOTT.results[index,1]),
+       li = c(dr.ATT.results[2], dr.ATN.results[2], dr.AOTT.results[index,2]),
+       ui = c(dr.ATT.results[3], dr.ATN.results[3], dr.AOTT.results[index,3]), xaxt = "n",
+       ylab = "Estimates", xlab = "Target Estimand", main = "(1) Taxed individual sized beverages",
+       #main = "(2) Taxed family sized beverages",
+       col = c("red", "dodgerblue", rep("black", 9)), lwd = 2, pch = 19, cex = 2)
+abline(h = 0)
+axis(1, at = c(1,2,6), tick = FALSE, c("ATT", "ATN", "AOTT"), 
+     col = c("red", "dodgerblue", "black"))
