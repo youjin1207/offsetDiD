@@ -142,5 +142,22 @@ sim_function = function(obs.data, case = 1){
   ## ipw estimator
   ipw.offset = outcome.part
   
-  return(list(ipw.offset = ipw.offset, reg.offset = reg.offset, dr.offset = dr.offset))
+  ### ATT
+  control.A = (obs.data$obs.A == 1); treat.A = (obs.data$obs.A == 2); neighbor.A =(obs.data$obs.A == 3)
+  a1 = mean(obs.data$obs.A == 2)
+  a2 =  mean(((obs.data$obs.A == 2) - pihat_treat*(obs.data$obs.A == 1)/pihat_control)*( (obs.data$obs.Y1 - obs.data$obs.Y0) - (muhat_control1 - muhat_control0)) )
+  dr.ATT = a2/a1  # doubly robust estimator
+  # regression-based estimator
+  reg.ATT = mean((obs.data$obs.A == 2)*(obs.data$obs.Y1 - obs.data$obs.Y0))/mean(obs.data$obs.A == 2) -  
+    mean((obs.data$obs.A == 2)*(muhat_control1 - muhat_control0))/mean(obs.data$obs.A == 2)
+  # ipw estimator
+  ipw.ATT =  mean((obs.data$obs.Y1 - obs.data$obs.Y0)*(treat.A/pihat_treat - control.A/pihat_control)*pihat_treat)/a1
+  
+  ## AOTT ##
+  reg.AOTT = reg.ATT + reg.offset
+  dr.AOTT = dr.ATT + dr.offset
+  ipw.AOTT = ipw.ATT + ipw.offset
+  
+  return(list(ipw.offset = ipw.offset, reg.offset = reg.offset, dr.offset = dr.offset,
+              ipw.AOTT = ipw.AOTT, reg.AOTT = reg.AOTT, dr.AOTT = dr.AOTT))
 }
