@@ -21,21 +21,21 @@ real_sim_function = function(long.data, theta = 1){
   # predicted outcomes conditional on Baltimore
   long.control = long.data
   long.control$obs.Z2 = 0; long.control$obs.Z3 = 0; long.control$obs.A2 = 0; long.control$obs.A3 = 0
-  muhat_control = predict(fit.outcome, newdata = long.control, re.form = ~ (1|ID))
+  muhat_control = predict(fit.outcome, newdata = long.control, re.form = ~ (1|ID), allow.new.levels = TRUE)
   muhat_control0 = muhat_control[long.data$year == 2016]; 
   muhat_control1 = muhat_control[long.data$year == 2017]
   
   # predicted outcomes conditional on neighboring controls
   long.neighbor = long.data
   long.neighbor$obs.Z2 = 0; long.neighbor$obs.Z3 = ifelse(long.neighbor$time == 1, 1, 0); long.neighbor$obs.A2 = 0; long.neighbor$obs.A3 = 1
-  muhat_neighbor = predict(fit.outcome, newdata = long.neighbor)
+  muhat_neighbor = predict(fit.outcome, newdata = long.neighbor, re.form = ~ (1|ID), allow.new.levels = TRUE)
   muhat_neighbor0 = muhat_neighbor[long.data$year == 2016]; 
   muhat_neighbor1 = muhat_neighbor[long.data$year == 2017]
   
   # predicted outcomes conditional on Philadelphia
   long.treat = long.data;
   long.treat$obs.Z2 = ifelse(long.treat$time == 1, 1, 0); long.treat$obs.Z3 = 0; long.treat$obs.A2 = 1; long.treat$obs.A3 = 0
-  muhat_treat = predict(fit.outcome, newdata = long.treat)
+  muhat_treat = predict(fit.outcome, newdata = long.treat, re.form = ~ (1|ID), allow.new.levels = TRUE)
   muhat_treat0 = muhat_treat[long.data$year == 2016]; 
   muhat_treat1 = muhat_treat[long.data$year == 2017]
   
@@ -45,13 +45,29 @@ real_sim_function = function(long.data, theta = 1){
   short.data$obs.Y1 = long.data$obs.Y[long.data$year == 2017]
   short.data$obs.A = ifelse(short.data$obs.A2 == 1, 2, ifelse(short.data$obs.A3 == 1, 3, 1))
   
-  ## propensity score model
-  prop.fit = multinom(obs.A ~ family.SS + family.AS + ind.SS + ind.AS + 
-                        BlackProportion + HispanicProportion + AsianProportion + 
-                        MaleProportion + IncomePerHousehold, data = short.data, trace = FALSE)
-  pihat_control = fitted.values(prop.fit)[,1]
-  pihat_treat = fitted.values(prop.fit)[,2]
-  pihat_neighbor = fitted.values(prop.fit)[,3]
+  ## propensity score model (two-stage)
+  cluster.data = aggregate(cbind(family.SS, family.AS, ind.SS, ind.AS, 
+                                 BlackProportion, HispanicProportion, AsianProportion,
+                                 MaleProportion, IncomePerHousehold,  obs.D) ~ cm, data = short.data, mean)
+  names(cluster.data) = c("cm", "family.SS.mean", "family.AS.mean", "ind.SS.mean", "ind.AS.mean", 
+                          "BlackProportion.mean", "HispanicProportion.mean", "AsianProportion.mean",
+                          "MaleProportion.mean", "IncomePerHousehold.mean", "obs.D")
+  subind.data = short.data[short.data$obs.A!=1, ]
+  subind.data$treat = (subind.data$obs.A == 2)
+  
+  fit1 = glm(obs.D ~ family.SS.mean + family.AS.mean + ind.SS.mean + ind.AS.mean +
+               BlackProportion.mean + HispanicProportion.mean + AsianProportion.mean + 
+               MaleProportion.mean + IncomePerHousehold.mean, data = cluster.data, family = binomial())
+  fit2 = glm(treat ~ family.SS + family.AS + ind.SS + ind.AS + 
+               BlackProportion + HispanicProportion + AsianProportion + 
+               MaleProportion + IncomePerHousehold, data = subind.data, family = binomial())
+  cluster.prop = rep(NA, nrow(short.data))
+  for(j in 1:nrow(cluster.data)) cluster.prop[short.data$cm %in% cluster.data$cm[j]] = fitted.values(fit1)[j]
+  #cluster.prop = rep(fitted.values(fit1), each = n)
+  ind.prop = predict(fit2, newdata = short.data, type = "response") 
+  pihat_control = (1-cluster.prop)
+  pihat_treat = cluster.prop*ind.prop
+  pihat_neighbor = cluster.prop*(1-ind.prop)
   
   pihat_control = ifelse(pihat_control < 0.01, 0.01, pihat_control)
   pihat_treat = ifelse(pihat_treat < 0.01, 0.01, pihat_treat)
